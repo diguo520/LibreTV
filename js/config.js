@@ -117,13 +117,11 @@ const API_SITES = {
     },
     kan: {
         api: 'https://39kan.com/api.php/provide/vod',
-        name: '39资源',
-        adult: true
+        name: '39资源', 
     },
     huya: {
         api: 'https://www.huyaapi.com/api.php/provide/vod/',
-        name: '虎牙资源',
-        adult: true
+        name: '虎牙资源', 
     },
     // 下面是一些成人内容的API源，默认隐藏，使用本项目浏览黄色内容违背项目初衷
     // 互联网上传播的色情内容将人彻底客体化、工具化，是性别解放和人类平等道路上的巨大障碍。
