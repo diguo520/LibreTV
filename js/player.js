@@ -392,8 +392,8 @@ function showShortcutHint(text, direction) {
 
     // 两秒后隐藏
     shortcutHintTimeout = setTimeout(() => {
-        hintElement.classList.remove('show');
-    }, 2000);
+        hintElement。classList。remove('show');
+    }， 2000);
 }
 
 // 初始化播放器
@@ -404,7 +404,7 @@ function initPlayer(videoUrl) {
 
     // 销毁旧实例
     if (art) {
-        art.destroy();
+        art。destroy();
         art = null;
     }
 
@@ -413,17 +413,17 @@ function initPlayer(videoUrl) {
         debug: false,
         loader: adFilteringEnabled ? CustomHlsJsLoader : Hls.DefaultConfig.loader,
         enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 90,
+        lowLatencyMode: false，
+        backBufferLength: 90，
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         maxBufferSize: 30 * 1000 * 1000,
-        maxBufferHole: 0.5,
+        maxBufferHole: 0.5，
         fragLoadingMaxRetry: 6,
         fragLoadingMaxRetryTimeout: 64000,
         fragLoadingRetryDelay: 1000,
         manifestLoadingMaxRetry: 3,
-        manifestLoadingRetryDelay: 1000,
+        manifestLoadingRetryDelay: 1000，
         levelLoadingMaxRetry: 4,
         levelLoadingRetryDelay: 1000,
         startLevel: -1,
@@ -431,21 +431,21 @@ function initPlayer(videoUrl) {
         abrBandWidthFactor: 0.95,
         abrBandWidthUpFactor: 0.7,
         abrMaxWithRealBitrate: true,
-        stretchShortVideoTrack: true,
+        stretchShortVideoTrack: true，
         appendErrorMaxRetry: 5,  // 增加尝试次数
-        liveSyncDurationCount: 3,
+        liveSyncDurationCount: 3，
         liveDurationInfinity: false
     };
 
     // Create new ArtPlayer instance
     art = new Artplayer({
-        container: '#player',
-        url: videoUrl,
+        container: '#player'，
+        url: videoUrl，
         type: 'm3u8',
         title: videoTitle,
         volume: 0.8,
         isLive: false,
-        muted: false,
+        muted: false，
         autoplay: true,
         pip: true,
         autoSize: false,
@@ -453,9 +453,9 @@ function initPlayer(videoUrl) {
         screenshot: true,
         setting: true,
         loop: false,
-        flip: false,
+        flip: true,
         playbackRate: true,
-        aspectRatio: false,
+        aspectRatio: true,
         fullscreen: true,
         fullscreenWeb: true,
         subtitleOffset: false,
