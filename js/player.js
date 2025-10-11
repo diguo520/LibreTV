@@ -392,8 +392,8 @@ function showShortcutHint(text, direction) {
 
     // 两秒后隐藏
     shortcutHintTimeout = setTimeout(() => {
-        hintElement。classList。remove('show');
-    }， 2000);
+        hintElement.classList.remove('show');
+    }, 2000);
 }
 
 // 初始化播放器
@@ -404,7 +404,7 @@ function initPlayer(videoUrl) {
 
     // 销毁旧实例
     if (art) {
-        art。destroy();
+        art.destroy();
         art = null;
     }
 
@@ -413,17 +413,17 @@ function initPlayer(videoUrl) {
         debug: false,
         loader: adFilteringEnabled ? CustomHlsJsLoader : Hls.DefaultConfig.loader,
         enableWorker: true,
-        lowLatencyMode: false，
-        backBufferLength: 90，
+        lowLatencyMode: false,
+        backBufferLength: 90,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         maxBufferSize: 30 * 1000 * 1000,
-        maxBufferHole: 0.5，
+        maxBufferHole: 0.5,
         fragLoadingMaxRetry: 6,
         fragLoadingMaxRetryTimeout: 64000,
         fragLoadingRetryDelay: 1000,
         manifestLoadingMaxRetry: 3,
-        manifestLoadingRetryDelay: 1000，
+        manifestLoadingRetryDelay: 1000,
         levelLoadingMaxRetry: 4,
         levelLoadingRetryDelay: 1000,
         startLevel: -1,
@@ -431,21 +431,21 @@ function initPlayer(videoUrl) {
         abrBandWidthFactor: 0.95,
         abrBandWidthUpFactor: 0.7,
         abrMaxWithRealBitrate: true,
-        stretchShortVideoTrack: true，
+        stretchShortVideoTrack: true,
         appendErrorMaxRetry: 5,  // 增加尝试次数
-        liveSyncDurationCount: 3，
+        liveSyncDurationCount: 3,
         liveDurationInfinity: false
     };
 
     // Create new ArtPlayer instance
     art = new Artplayer({
-        container: '#player'，
-        url: videoUrl，
+        container: '#player',
+        url: videoUrl,
         type: 'm3u8',
         title: videoTitle,
         volume: 0.8,
         isLive: false,
-        muted: false，
+        muted: false,
         autoplay: true,
         pip: true,
         autoSize: false,
@@ -453,9 +453,9 @@ function initPlayer(videoUrl) {
         screenshot: true,
         setting: true,
         loop: false,
-        flip: true,
+        flip: false,
         playbackRate: true,
-        aspectRatio: true,
+        aspectRatio: false,
         fullscreen: true,
         fullscreenWeb: true,
         subtitleOffset: false,
@@ -583,91 +583,70 @@ function initPlayer(videoUrl) {
         }
     });
 
-    // 自动隐藏工具栏的逻辑
+    // artplayer 没有 'fullscreenWeb:enter', 'fullscreenWeb:exit' 等事件
+    // 所以原控制栏隐藏代码并没有起作用
+    // 实际起作用的是 artplayer 默认行为，它支持自动隐藏工具栏
+    // 但有一个 bug： 在副屏全屏时，鼠标移出副屏后不会自动隐藏工具栏
+    // 下面进一并重构和修复：
     let hideTimer;
-    const HIDE_DELAY = 2000; // 2秒后隐藏
 
-    // 创建鼠标跟踪状态
-    let isMouseActive = false;
-    let isMouseOverPlayer = false;
-
+    // 隐藏控制栏
     function hideControls() {
-        if (isMouseActive || !isMouseOverPlayer) return;
-        art.controls.classList.add('art-controls-hide');
+        if (art && art.controls) {
+            art.controls.show = false;
+        }
     }
 
-    function showControls() {
-        art.controls.classList.remove('art-controls-hide');
-    }
-
+    // 重置计时器，计时器超时时间与 artplayer 保持一致
     function resetHideTimer() {
         clearTimeout(hideTimer);
-        showControls();
-        isMouseActive = true;
-
         hideTimer = setTimeout(() => {
-            isMouseActive = false;
             hideControls();
-        }, HIDE_DELAY);
+        }, Artplayer.CONTROL_HIDE_TIME);
     }
-
-    // 监听全屏状态变化
-    art.on('fullscreenWeb:enter', () => {
-        // 添加全局事件监听
-        document.addEventListener('mousemove', resetHideTimer);
-        document.addEventListener('mouseleave', handleMouseLeave);
-        document.addEventListener('mouseenter', handleMouseEnter);
-
-        // 添加播放器区域事件
-        art.player.addEventListener('mouseenter', () => isMouseOverPlayer = true);
-        art.player.addEventListener('mouseleave', () => isMouseOverPlayer = false);
-
-        // 初始状态
-        isMouseOverPlayer = true;
-        resetHideTimer();
-    });
-
-    art.on('fullscreenWeb:exit', () => {
-        // 移除所有事件监听
-        document.removeEventListener('mousemove', resetHideTimer);
-        document.removeEventListener('mouseleave', handleMouseLeave);
-        document.removeEventListener('mouseenter', handleMouseEnter);
-
-        art.player.removeEventListener('mouseenter', () => isMouseOverPlayer = true);
-        art.player.removeEventListener('mouseleave', () => isMouseOverPlayer = false);
-
-        // 清除定时器并显示控件
-        clearTimeout(hideTimer);
-        showControls();
-    });
 
     // 处理鼠标离开浏览器窗口
-    function handleMouseLeave() {
-        // 立即隐藏工具栏
-        hideControls();
-        clearTimeout(hideTimer);
+    function handleMouseOut(e) {
+        if (e && !e.relatedTarget) {
+            resetHideTimer();
+        }
     }
-    
-    // 处理鼠标返回浏览器窗口
-    function handleMouseEnter() {
-        isMouseActive = true;
-        resetHideTimer();
+
+    // 全屏状态切换时注册/移除 mouseout 事件，监听鼠标移出屏幕事件
+    // 从而对播放器状态栏进行隐藏倒计时
+    function handleFullScreen(isFullScreen, isWeb) {
+        if (isFullScreen) {
+            document.addEventListener('mouseout', handleMouseOut);
+        } else {
+            document.removeEventListener('mouseout', handleMouseOut);
+            // 退出全屏时清理计时器
+            clearTimeout(hideTimer);
+        }
+
+        if (!isWeb) {
+            if (window.screen.orientation && window.screen.orientation.lock) {
+                window.screen.orientation.lock('landscape')
+                    .then(() => {
+                    })
+                    .catch((error) => {
+                    });
+            }
+        }
     }
 
     // 播放器加载完成后初始隐藏工具栏
     art.on('ready', () => {
-        art.controls.classList.add('art-controls-hide');
+        hideControls();
+    });
+
+    // 全屏 Web 模式处理
+    art.on('fullscreenWeb', function (isFullScreen) {
+        handleFullScreen(isFullScreen, true);
     });
 
     // 全屏模式处理
-    art.on('fullscreen', function () {
-        if (window.screen.orientation && window.screen.orientation.lock) {
-            window.screen.orientation.lock('landscape')
-                .then(() => {
-                })
-                .catch((error) => {
-                });
-        }
+    art.on('fullscreen', function (isFullScreen) {
+        handleFullScreen(isFullScreen, false);
     });
 
     art.on('video:loadedmetadata', function() {
@@ -827,23 +806,23 @@ function filterAdsFromM3U8(m3u8Content, strictMode = false) {
 // 显示错误
 function showError(message) {
     // 在视频已经播放的情况下不显示错误
-    if (art && art.video && art.video.currentTime > 1) {
+    if (art && art.video && art。video。currentTime > 1) {
         return;
     }
     const loadingEl = document.getElementById('player-loading');
     if (loadingEl) loadingEl.style.display = 'none';
     const errorEl = document.getElementById('error');
     if (errorEl) errorEl.style.display = 'flex';
-    const errorMsgEl = document.getElementById('error-message');
+    const errorMsgEl = document。getElementById('error-message');
     if (errorMsgEl) errorMsgEl.textContent = message;
 }
 
 // 更新集数信息
 function updateEpisodeInfo() {
-    if (currentEpisodes.length > 0) {
-        document.getElementById('episodeInfo').textContent = `第 ${currentEpisodeIndex + 1}/${currentEpisodes.length} 集`;
+    if (currentEpisodes。length > 0) {
+        document.getElementById('episodeInfo')。textContent = `第 ${currentEpisodeIndex + 1}/${currentEpisodes.length} 集`;
     } else {
-        document.getElementById('episodeInfo').textContent = '无集数信息';
+        document。getElementById('episodeInfo')。textContent = '无集数信息';
     }
 }
 
@@ -858,19 +837,19 @@ function updateButtonStates() {
         prevButton.classList.add('bg-[#222]', 'hover:bg-[#333]');
         prevButton.removeAttribute('disabled');
     } else {
-        prevButton.classList.add('bg-gray-700', 'cursor-not-allowed');
-        prevButton.classList.remove('bg-[#222]', 'hover:bg-[#333]');
+        prevButton。classList。add('bg-gray-700'， 'cursor-not-allowed');
+        prevButton。classList。remove('bg-[#222]'， 'hover:bg-[#333]');
         prevButton.setAttribute('disabled', '');
     }
 
     // 处理下一集按钮
     if (currentEpisodeIndex < currentEpisodes.length - 1) {
-        nextButton.classList.remove('bg-gray-700', 'cursor-not-allowed');
-        nextButton.classList.add('bg-[#222]', 'hover:bg-[#333]');
+        nextButton.classList.remove('bg-gray-700'， 'cursor-not-allowed');
+        nextButton。classList。add('bg-[#222]', 'hover:bg-[#333]');
         nextButton.removeAttribute('disabled');
     } else {
         nextButton.classList.add('bg-gray-700', 'cursor-not-allowed');
-        nextButton.classList.remove('bg-[#222]', 'hover:bg-[#333]');
+        nextButton。classList。remove('bg-[#222]'， 'hover:bg-[#333]');
         nextButton.setAttribute('disabled', '');
     }
 }
@@ -924,16 +903,16 @@ function playEpisode(index) {
     }
 
     // 首先隐藏之前可能显示的错误
-    document.getElementById('error').style.display = 'none';
+    document。getElementById('error')。style.display = 'none';
     // 显示加载指示器
-    document.getElementById('player-loading').style.display = 'flex';
-    document.getElementById('player-loading').innerHTML = `
+    document.getElementById('player-loading')。style.display = 'flex';
+    document。getElementById('player-loading').innerHTML = `
         <div class="loading-spinner"></div>
         <div>正在加载视频...</div>
     `;
 
     // 获取 sourceCode
-    const urlParams2 = new URLSearchParams(window.location.search);
+    const urlParams2 = new URLSearchParams(window。location。search);
     const sourceCode = urlParams2.get('source_code');
 
     // 准备切换剧集的URL
@@ -947,16 +926,16 @@ function playEpisode(index) {
     clearVideoProgress();
 
     // 更新URL参数（不刷新页面）
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('index', index);
-    currentUrl.searchParams.set('url', url);
-    currentUrl.searchParams.delete('position');
-    window.history.replaceState({}, '', currentUrl.toString());
+    const currentUrl = new URL(window。location。href);
+    currentUrl。searchParams.set('index'， index);
+    currentUrl.searchParams.set('url'， url);
+    currentUrl。searchParams.delete('position');
+    window。history。replaceState({}, '', currentUrl.toString());
 
     if (isWebkit) {
         initPlayer(url);
     } else {
-        art.switch = url;
+        art。switch = url;
     }
 
     // 更新UI
@@ -968,7 +947,7 @@ function playEpisode(index) {
     userClickedPosition = null;
 
     // 三秒后保存到历史记录
-    setTimeout(() => saveToHistory(), 3000);
+    setTimeout(() => saveToHistory()， 3000);
 }
 
 // 播放上一集
@@ -991,10 +970,10 @@ function copyLinks() {
     const urlParams = new URLSearchParams(window.location.search);
     const linkUrl = urlParams.get('url') || '';
     if (linkUrl !== '') {
-        navigator.clipboard.writeText(linkUrl).then(() => {
-            showToast('播放链接已复制', 'success');
+        navigator。clipboard。writeText(linkUrl).then(() => {
+            showToast('播放链接已复制'， 'success');
         }).catch(err => {
-            showToast('复制失败，请检查浏览器权限', 'error');
+            showToast('复制失败，请检查浏览器权限'， 'error');
         });
     }
 }
@@ -1020,7 +999,7 @@ function updateOrderButton() {
 
     if (orderText && orderIcon) {
         orderText.textContent = episodesReversed ? '正序排列' : '倒序排列';
-        orderIcon.style.transform = episodesReversed ? 'rotate(180deg)' : '';
+        orderIcon。style。transform = episodesReversed ? 'rotate(180deg)' : '';
     }
 }
 
@@ -1034,7 +1013,7 @@ function setupProgressBarPreciseClicks() {
     progressBar.removeEventListener('mousedown', handleProgressBarClick);
 
     // 添加新的事件监听器
-    progressBar.addEventListener('mousedown', handleProgressBarClick);
+    progressBar.addEventListener('mousedown'， handleProgressBarClick);
 
     // 在移动端也添加触摸事件支持
     progressBar.removeEventListener('touchstart', handleProgressBarTouch);
@@ -1322,7 +1301,7 @@ function setupLongPressSpeedControl() {
     };
 
     // 触摸开始事件
-    playerElement.addEventListener('touchstart', function (e) {
+    playerElement。addEventListener('touchstart'， function (e) {
         // 检查视频是否正在播放，如果没有播放则不触发长按功能
         if (art.video.paused) {
             return; // 视频暂停时不触发长按功能
@@ -1341,7 +1320,7 @@ function setupLongPressSpeedControl() {
             }
 
             // 长按超过500ms，设置为3倍速
-            art.video.playbackRate = 3.0;
+            art.video。playbackRate = 3.0;
             isLongPress = true;
             showSpeedHint(3.0);
 
@@ -1360,7 +1339,7 @@ function setupLongPressSpeedControl() {
 
         // 如果是长按状态，恢复原始播放速度
         if (isLongPress) {
-            art.video.playbackRate = originalPlaybackRate;
+            art。video。playbackRate = originalPlaybackRate;
             isLongPress = false;
             showSpeedHint(originalPlaybackRate);
 
@@ -1388,14 +1367,14 @@ function setupLongPressSpeedControl() {
     // 触摸移动事件 - 防止在长按时触发页面滚动
     playerElement.addEventListener('touchmove', function (e) {
         if (isLongPress) {
-            e.preventDefault();
+            e。preventDefault();
         }
-    }, { passive: false });
+    }， { passive: false });
 
     // 视频暂停时取消长按状态
     art.video.addEventListener('pause', function () {
         if (isLongPress) {
-            art.video.playbackRate = originalPlaybackRate;
+            art。video。playbackRate = originalPlaybackRate;
             isLongPress = false;
         }
 
@@ -1410,7 +1389,7 @@ function setupLongPressSpeedControl() {
 function clearVideoProgress() {
     const progressKey = `videoProgress_${getVideoId()}`;
     try {
-        localStorage.removeItem(progressKey);
+        localStorage。removeItem(progressKey);
     } catch (e) {
     }
 }
@@ -1506,6 +1485,114 @@ function renderResourceInfoBar() {
     `;
 }
 
+// 测试视频源速率的函数
+async function testVideoSourceSpeed(sourceKey, vodId) {
+    try {
+        const startTime = performance.now();
+        
+        // 构建API参数
+        let apiParams = '';
+        if (sourceKey.startsWith('custom_')) {
+            const customIndex = sourceKey.replace('custom_', '');
+            const customApi = getCustomApiInfo(customIndex);
+            if (!customApi) {
+                return { speed: -1, error: 'API配置无效' };
+            }
+            if (customApi.detail) {
+                apiParams = '&customApi=' + encodeURIComponent(customApi.url) + '&customDetail=' + encodeURIComponent(customApi.detail) + '&source=custom';
+            } else {
+                apiParams = '&customApi=' + encodeURIComponent(customApi.url) + '&source=custom';
+            }
+        } else {
+            apiParams = '&source=' + sourceKey;
+        }
+        
+        // 添加时间戳防止缓存
+        const timestamp = new Date().getTime();
+        const cacheBuster = `&_t=${timestamp}`;
+        
+        // 获取视频详情
+        const response = await fetch(`/api/detail?id=${encodeURIComponent(vodId)}${apiParams}${cacheBuster}`, {
+            method: 'GET',
+            cache: 'no-cache'
+        });
+        
+        if (!response.ok) {
+            return { speed: -1, error: '获取失败' };
+        }
+        
+        const data = await response.json();
+        
+        if (!data.episodes || data.episodes.length === 0) {
+            return { speed: -1, error: '无播放源' };
+        }
+        
+        // 测试第一个播放链接的响应速度
+        const firstEpisodeUrl = data.episodes[0];
+        if (!firstEpisodeUrl) {
+            return { speed: -1, error: '链接无效' };
+        }
+        
+        // 测试视频链接响应时间
+        const videoTestStart = performance.now();
+        try {
+            const videoResponse = await fetch(firstEpisodeUrl, {
+                method: 'HEAD',
+                mode: 'no-cors',
+                cache: 'no-cache',
+                signal: AbortSignal.timeout(5000) // 5秒超时
+            });
+            
+            const videoTestEnd = performance.now();
+            const totalTime = videoTestEnd - startTime;
+            
+            // 返回总响应时间（毫秒）
+            return { 
+                speed: Math.round(totalTime),
+                episodes: data.episodes.length,
+                error: null 
+            };
+        } catch (videoError) {
+            // 如果视频链接测试失败，只返回API响应时间
+            const apiTime = performance.now() - startTime;
+            return { 
+                speed: Math.round(apiTime),
+                episodes: data.episodes.length,
+                error: null,
+                note: 'API响应' 
+            };
+        }
+        
+    } catch (error) {
+        return { 
+            speed: -1, 
+            error: error.name === 'AbortError' ? '超时' : '测试失败' 
+        };
+    }
+}
+
+// 格式化速度显示
+function formatSpeedDisplay(speedResult) {
+    if (speedResult.speed === -1) {
+        return `<span class="speed-indicator error">❌ ${speedResult.error}</span>`;
+    }
+    
+    const speed = speedResult.speed;
+    let className = 'speed-indicator good';
+    let icon = '🟢';
+    
+    if (speed > 2000) {
+        className = 'speed-indicator poor';
+        icon = '🔴';
+    } else if (speed > 1000) {
+        className = 'speed-indicator medium';
+        icon = '🟡';
+    }
+    
+    const note = speedResult.note ? ` (${speedResult.note})` : '';
+    return `<span class="${className}">${icon} ${speed}ms${note}</span>`;
+}
+
 async function showSwitchResourceModal() {
     const urlParams = new URLSearchParams(window.location.search);
     const currentSourceCode = urlParams.get('source');
@@ -1546,6 +1633,17 @@ async function showSwitchResourceModal() {
         allResults[opt.key] = result;
     }));
 
+    // 更新状态显示：开始速率测试
+    modalContent.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;grid-column:1/-1;">正在测试各资源速率...</div>';
+
+    // 同时测试所有资源的速率
+    const speedResults = {};
+    await Promise.all(Object.entries(allResults).map(async ([sourceKey, result]) => {
+        if (result) {
+            speedResults[sourceKey] = await testVideoSourceSpeed(sourceKey, result.vod_id);
+        }
+    }));
+
     // 对结果进行排序
     const sortedResults = Object.entries(allResults).sort(([keyA, resultA], [keyB, resultB]) => {
         // 当前播放的源放在最前面
@@ -1555,15 +1653,19 @@ async function showSwitchResourceModal() {
         if (isCurrentA && !isCurrentB) return -1;
         if (!isCurrentA && isCurrentB) return 1;
         
-        // 其余按照 selectedAPIs 的顺序排列
-        const indexA = selectedAPIs.indexOf(keyA);
-        const indexB = selectedAPIs.indexOf(keyB);
+        // 其余按照速度排序，速度快的在前面（速度为-1表示失败，排到最后）
+        const speedA = speedResults[keyA]?.speed || 99999;
+        const speedB = speedResults[keyB]?.speed || 99999;
         
-        return indexA - indexB;
+        if (speedA === -1 && speedB !== -1) return 1;
+        if (speedA !== -1 && speedB === -1) return -1;
+        if (speedA === -1 && speedB === -1) return 0;
+        
+        return speedA - speedB;
     });
 
     // 渲染资源列表
-    let html = '<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 p-4">';
+    let html = '<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 p-4">';
     
     for (const [sourceKey, result] of sortedResults) {
         if (!result) continue;
@@ -1571,23 +1673,32 @@ async function showSwitchResourceModal() {
         // 修复 isCurrentSource 判断，确保类型一致
         const isCurrentSource = String(sourceKey) === String(currentSourceCode) && String(result.vod_id) === String(currentVideoId);
         const sourceName = resourceOptions.find(opt => opt.key === sourceKey)?.name || '未知资源';
+        const speedResult = speedResults[sourceKey] || { speed: -1, error: '未测试' };
         
         html += `
             <div class="relative group ${isCurrentSource ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105 transition-transform'}" 
                  ${!isCurrentSource ? `onclick="switchToResource('${sourceKey}', '${result.vod_id}')"` : ''}>
-                <div class="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800">
+                <div class="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 relative">
                     <img src="${result.vod_pic}" 
                          alt="${result.vod_name}"
                          class="w-full h-full object-cover"
                          onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIgcnk9IjIiPjwvcmVjdD48cGF0aCBkPSJNMjEgMTV2NGEyIDIgMCAwIDEtMiAySDVhMiAyIDAgMCAxLTItMnYtNCI+PC9wYXRoPjxwb2x5bGluZSBwb2ludHM9IjE3IDggMTIgMyA3IDgiPjwvcG9seWxpbmU+PHBhdGggZD0iTTEyIDN2MTIiPjwvcGF0aD48L3N2Zz4='">
+                    
+                    <!-- 速率显示在图片右上角 -->
+                    <div class="absolute top-1 right-1 speed-badge bg-black bg-opacity-75">
+                        ${formatSpeedDisplay(speedResult)}
+                    </div>
                 </div>
-                <div class="mt-1">
+                <div class="mt-2">
                     <div class="text-xs font-medium text-gray-200 truncate">${result.vod_name}</div>
-                    <div class="text-[10px] text-gray-400">${sourceName}</div>
+                    <div class="text-[10px] text-gray-400 truncate">${sourceName}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">
+                        ${speedResult.episodes ? `${speedResult.episodes}集` : ''}
+                    </div>
                 </div>
                 ${isCurrentSource ? `
                     <div class="absolute inset-0 flex items-center justify-center">
-                        <div class="bg-black bg-opacity-50 rounded-lg px-2 py-0.5 text-xs text-white">
+                        <div class="bg-blue-600 bg-opacity-75 rounded-lg px-2 py-0.5 text-xs text-white font-medium">
                             当前播放
                         </div>
                     </div>
@@ -1597,13 +1708,13 @@ async function showSwitchResourceModal() {
     }
     
     html += '</div>';
-    modalContent.innerHTML = html;
+    modalContent。innerHTML = html;
 }
 
 // 切换资源的函数
-async function switchToResource(sourceKey, vodId) {
+async function switchToResource(sourceKey， vodId) {
     // 关闭模态框
-    document.getElementById('modal').classList.add('hidden');
+    document。getElementById('modal')。classList。add('hidden');
     
     showLoading();
     try {
@@ -1612,18 +1723,18 @@ async function switchToResource(sourceKey, vodId) {
         
         // 处理自定义API源
         if (sourceKey.startsWith('custom_')) {
-            const customIndex = sourceKey.replace('custom_', '');
+            const customIndex = sourceKey。替换('custom_'， '');
             const customApi = getCustomApiInfo(customIndex);
             if (!customApi) {
-                showToast('自定义API配置无效', 'error');
+                showToast('自定义API配置无效'， 'error');
                 hideLoading();
                 return;
             }
             // 传递 detail 字段
-            if (customApi.detail) {
-                apiParams = '&customApi=' + encodeURIComponent(customApi.url) + '&customDetail=' + encodeURIComponent(customApi.detail) + '&source=custom';
+            if (customApi。detail) {
+                apiParams = '&customApi=' + encodeURIComponent(customApi.url) + '&customDetail=' + encodeURIComponent(customApi。detail) + '&source=custom';
             } else {
-                apiParams = '&customApi=' + encodeURIComponent(customApi.url) + '&source=custom';
+                apiParams = '&customApi=' + encodeURIComponent(customApi。url) + '&source=custom';
             }
         } else {
             // 内置API
@@ -1631,14 +1742,14 @@ async function switchToResource(sourceKey, vodId) {
         }
         
         // Add a timestamp to prevent caching
-        const timestamp = new Date().getTime();
+        const timestamp = new Date()。getTime();
         const cacheBuster = `&_t=${timestamp}`;
         const response = await fetch(`/api/detail?id=${encodeURIComponent(vodId)}${apiParams}${cacheBuster}`);
         
         const data = await response.json();
         
-        if (!data.episodes || data.episodes.length === 0) {
-            showToast('未找到播放资源', 'error');
+        if (!data。episodes || data。episodes。length === 0) {
+            showToast('未找到播放资源'， 'error');
             hideLoading();
             return;
         }
@@ -1648,13 +1759,13 @@ async function switchToResource(sourceKey, vodId) {
         
         // 确定要播放的集数索引
         let targetIndex = 0;
-        if (currentIndex < data.episodes.length) {
+        if (currentIndex < data。episodes。length) {
             // 如果当前集数在新资源中存在，则使用相同集数
             targetIndex = currentIndex;
         }
         
         // 获取目标集数的URL
-        const targetUrl = data.episodes[targetIndex];
+        const targetUrl = data。episodes[targetIndex];
         
         // 构建播放页面URL
         const watchUrl = `player.html?id=${vodId}&source=${sourceKey}&url=${encodeURIComponent(targetUrl)}&index=${targetIndex}&title=${encodeURIComponent(currentVideoTitle)}`;
